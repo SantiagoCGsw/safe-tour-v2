@@ -1,8 +1,10 @@
+// server/src/services/admin.service.js
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
 import User, { ROLES } from '../models/User.model.js'
 import Zone, { TIPOS_ZONA } from '../models/Zone.model.js'
 import Report from '../models/Report.model.js'
+import Post from '../models/Post.model.js'
 import Config from '../models/Config.model.js'
 import { env } from '../config/env.js'
 import { AppError } from '../middlewares/error.middleware.js'
@@ -77,13 +79,15 @@ export const cambiarEstado = async (actor, id, activo) => {
 export const obtenerEstadisticas = async (rango = {}) => {
   const fechas = filtroFechas(rango)
 
-  const [totalUsuarios, porRolConteo, zonasActivas, porTipoConteo, reportes] = await Promise.all([
-    User.countDocuments(fechas),
-    Promise.all(ROLES.map((rol) => User.countDocuments({ ...fechas, rol }))),
-    Zone.countDocuments({ ...fechas, activo: true }),
-    Promise.all(TIPOS_ZONA.map((tipo) => Zone.countDocuments({ ...fechas, activo: true, tipo }))),
-    Report.countDocuments({ ...fechas, activo: true }),
-  ])
+  const [totalUsuarios, porRolConteo, zonasActivas, porTipoConteo, reportes, publicaciones] =
+    await Promise.all([
+      User.countDocuments(fechas),
+      Promise.all(ROLES.map((rol) => User.countDocuments({ ...fechas, rol }))),
+      Zone.countDocuments({ ...fechas, activo: true }),
+      Promise.all(TIPOS_ZONA.map((tipo) => Zone.countDocuments({ ...fechas, activo: true, tipo }))),
+      Report.countDocuments({ ...fechas, activo: true }),
+      Post.countDocuments({ ...fechas, activo: true }),
+    ])
 
   return {
     usuarios: {
@@ -95,6 +99,7 @@ export const obtenerEstadisticas = async (rango = {}) => {
       porTipo: Object.fromEntries(TIPOS_ZONA.map((tipo, i) => [tipo, porTipoConteo[i]])),
     },
     reportes,
+    publicaciones,
   }
 }
 

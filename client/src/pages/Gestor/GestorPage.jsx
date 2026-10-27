@@ -1,9 +1,13 @@
+// client/src/pages/Gestor/GestorPage.jsx
 import { useEffect, useState } from 'react'
 import { Polygon, Polyline, CircleMarker } from 'react-leaflet'
 import MapView from '../../components/map/MapView.jsx'
 import ZoneLayer from '../../components/map/ZoneLayer.jsx'
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx'
+import PostCard from '../../components/feed/PostCard.jsx'
 import { listarZonas, crearZona, actualizarZona, desactivarZona } from '../../api/zones.js'
+import { listarDisputas, resolverDisputa } from '../../api/reports.js'
+import { listarModeracion } from '../../api/posts.js'
 import { mensajeDeError } from '../../api/client.js'
 
 const TIPOS = [
@@ -21,6 +25,20 @@ const NIVELES = [
   { valor: 5, etiqueta: '5 · Riesgo muy bajo' },
 ]
 
+const ETIQUETA_TIPO_REPORTE = {
+  robo: 'Robo',
+  accidente: 'Accidente',
+  peligro: 'Peligro',
+  obra: 'Obra',
+  turismo: 'Turismo',
+}
+
+const VISTAS = [
+  { valor: 'zonas', etiqueta: 'Zonas' },
+  { valor: 'disputas', etiqueta: 'Disputas' },
+  { valor: 'moderacion', etiqueta: 'Moderación' },
+]
+
 const BORRADOR_NUEVO = {
   id: null,
   nombre: '',
@@ -30,9 +48,31 @@ const BORRADOR_NUEVO = {
   puntos: [],
 }
 
+const FILTROS_VACIOS = { zona: '', desde: '', hasta: '' }
+
 const ESTILO_BORRADOR = { color: '#5aa2ff', weight: 3, dashArray: '6 6', fillOpacity: 0.15 }
 
-export default function GestorPage() {
+const aParametros = ({ zona, desde, hasta }) => {
+  const params = {}
+  if (zona) params.zona = zona
+  if (desde) params.desde = new Date(`${desde}T00:00:00`).toISOString()
+  if (hasta) params.hasta = new Date(`${hasta}T23:59:59.999`).toISOString()
+  return params
+}
+
+function Aviso({ aviso }) {
+  if (!aviso.texto) return null
+  return (
+    <p
+      className={`alert ${aviso.tipo === 'error' ? 'alert--error' : 'alert--success'}`}
+      role={aviso.tipo === 'error' ? 'alert' : 'status'}
+    >
+      {aviso.texto}
+    </p>
+  )
+}
+
+function SeccionZonas() {
   const [version, setVersion] = useState(0)
   const [resultado, setResultado] = useState({ version: null, zonas: [], error: '' })
   const [editor, setEditor] = useState(null)
@@ -134,12 +174,9 @@ export default function GestorPage() {
   const posiciones = editor ? editor.puntos.map((p) => [p.lat, p.lng]) : []
 
   return (
-    <div className="page">
+    <>
       <div className="row row--between">
-        <div>
-          <h1 className="page__title">Gestión de zonas</h1>
-          <p className="page__subtitle">Crea, edita y desactiva zonas del mapa.</p>
-        </div>
+        <p className="muted">Crea, edita y desactiva zonas del mapa.</p>
         {!editor && (
           <button type="button" className="btn btn--primary" onClick={abrirNueva}>
             Nueva zona
@@ -147,14 +184,7 @@ export default function GestorPage() {
         )}
       </div>
 
-      {aviso.texto && (
-        <p
-          className={`alert ${aviso.tipo === 'error' ? 'alert--error' : 'alert--success'}`}
-          role={aviso.tipo === 'error' ? 'alert' : 'status'}
-        >
-          {aviso.texto}
-        </p>
-      )}
+      <Aviso aviso={aviso} />
 
       {editor && (
         <section className="card stack" aria-labelledby="editor-titulo">
@@ -308,6 +338,319 @@ export default function GestorPage() {
         onConfirm={confirmarDesactivacion}
         onCancel={() => setADesactivar(null)}
       />
+    </>
+  )
+}
+
+function SeccionDisputas() {
+  const [version, setVersion] = useState(0)
+  const [resultado, setResultado] = useState({ version: null, reportes: [], error: '' })
+  const [pendiente, setPendiente] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+  const [aviso, setAviso] = useState({ tipo: '', texto: '' })
+
+  useEffect(() => {
+    let activo = true
+    listarDisputas()
+      .then((reportes) => activo && setResultado({ version, reportes, error: '' }))
+      .catch((err) => activo && setResultado({ version, reportes: [], error: mensajeDeError(err) }))
+    return () => {
+      activo = false
+    }
+  }, [version])
+
+  const cargando = resultado.version !== version
+  const reportes = cargando ? [] : resultado.reportes
+  const error = cargando ? '' : resultado.error
+  const recargar = () => setVersion((v) => v + 1)
+
+  const resolver = async () => {
+    setEnviando(true)
+    try {
+      await resolverDisputa(pendiente.reporte._id, pendiente.decision)
+      setAviso({
+        tipo: 'success',
+        texto: pendiente.decision === 'confirmado' ? 'Reporte confirmado' : 'Reporte rechazado',
+      })
+      recargar()
+    } catch (err) {
+      setAviso({ tipo: 'error', texto: mensajeDeError(err, 'No se pudo resolver la disputa') })
+    } finally {
+      setEnviando(false)
+      setPendiente(null)
+    }
+  }
+
+  return (
+    <>
+      <p className="muted">
+        Reportes cuya votación no fue concluyente. Tu decisión queda registrada y, si confirmas, el
+        reporte empieza a contar en el mapa de calor.
+      </p>
+
+      <Aviso aviso={aviso} />
+
+      {cargando && (
+        <div className="state" role="status">
+          <div className="spinner" aria-hidden="true" />
+          <p>Cargando disputas…</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="card state" role="alert">
+          <p className="state__title">No se pudieron cargar las disputas</p>
+          <p>{error}</p>
+          <button type="button" className="btn btn--primary" onClick={recargar}>
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {!cargando && !error && reportes.length === 0 && (
+        <div className="card state">
+          <p className="state__title">Sin disputas</p>
+          <p>No hay reportes esperando una decisión.</p>
+        </div>
+      )}
+
+      {reportes.map((r) => (
+        <article key={r._id} className="card stack" aria-labelledby={`disp-${r._id}`}>
+          <div className="row row--between">
+            <h2 id={`disp-${r._id}`} className="card__title">
+              {r.titulo}
+            </h2>
+            <span className="badge badge--warn">En disputa</span>
+          </div>
+
+          <p className="muted">
+            {ETIQUETA_TIPO_REPORTE[r.tipo] ?? r.tipo} · {r.autor?.nombre ?? 'Usuario'} ·{' '}
+            {new Date(r.createdAt).toLocaleString('es-CO')}
+          </p>
+
+          {r.descripcion && <p>{r.descripcion}</p>}
+
+          <p className="muted">
+            {r.confirmaciones} confirman · {r.rechazos} rechazan
+          </p>
+
+          <div className="row">
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={() => setPendiente({ reporte: r, decision: 'confirmado' })}
+            >
+              Confirmar reporte
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger btn--sm"
+              onClick={() => setPendiente({ reporte: r, decision: 'rechazado' })}
+            >
+              Rechazar reporte
+            </button>
+          </div>
+        </article>
+      ))}
+
+      <ConfirmDialog
+        open={Boolean(pendiente)}
+        title={pendiente?.decision === 'confirmado' ? 'Confirmar reporte' : 'Rechazar reporte'}
+        message={
+          pendiente?.decision === 'confirmado'
+            ? `El reporte «${pendiente?.reporte.titulo}» pasará a confirmado y contará en el mapa de calor.`
+            : `El reporte «${pendiente?.reporte.titulo}» pasará a rechazado y no contará en el mapa de calor.`
+        }
+        confirmLabel={pendiente?.decision === 'confirmado' ? 'Confirmar' : 'Rechazar'}
+        danger={pendiente?.decision === 'rechazado'}
+        loading={enviando}
+        onConfirm={resolver}
+        onCancel={() => setPendiente(null)}
+      />
+    </>
+  )
+}
+
+function SeccionModeracion() {
+  const [version, setVersion] = useState(0)
+  const [zonas, setZonas] = useState([])
+  const [borrador, setBorrador] = useState(FILTROS_VACIOS)
+  const [aplicados, setAplicados] = useState(FILTROS_VACIOS)
+  const [errorFiltro, setErrorFiltro] = useState('')
+  const [resultado, setResultado] = useState({ clave: null, publicaciones: [], error: '' })
+
+  const clave = `${JSON.stringify(aplicados)}:${version}`
+
+  useEffect(() => {
+    let activo = true
+    listarZonas()
+      .then((lista) => activo && setZonas(lista))
+      .catch(() => activo && setZonas([]))
+    return () => {
+      activo = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let activo = true
+    listarModeracion(aParametros(aplicados))
+      .then((publicaciones) => activo && setResultado({ clave, publicaciones, error: '' }))
+      .catch(
+        (err) =>
+          activo && setResultado({ clave, publicaciones: [], error: mensajeDeError(err) }),
+      )
+    return () => {
+      activo = false
+    }
+  }, [aplicados, clave])
+
+  const cargando = resultado.clave !== clave
+  const publicaciones = cargando ? [] : resultado.publicaciones
+  const error = cargando ? '' : resultado.error
+  const recargar = () => setVersion((v) => v + 1)
+
+  const cambiarFiltro = (e) => setBorrador((f) => ({ ...f, [e.target.name]: e.target.value }))
+
+  const aplicar = (e) => {
+    e.preventDefault()
+    if (borrador.desde && borrador.hasta && borrador.desde > borrador.hasta) {
+      setErrorFiltro('La fecha inicial no puede ser posterior a la final')
+      return
+    }
+    setErrorFiltro('')
+    setAplicados(borrador)
+  }
+
+  const limpiar = () => {
+    setErrorFiltro('')
+    setBorrador(FILTROS_VACIOS)
+    setAplicados(FILTROS_VACIOS)
+  }
+
+  const reemplazar = (actualizada) =>
+    setResultado((prev) => ({
+      ...prev,
+      publicaciones: prev.publicaciones.map((p) =>
+        p._id === actualizada._id ? { ...actualizada, denuncias: p.denuncias } : p,
+      ),
+    }))
+
+  const quitar = (id) =>
+    setResultado((prev) => ({
+      ...prev,
+      publicaciones: prev.publicaciones.filter((p) => p._id !== id),
+    }))
+
+  return (
+    <>
+      <p className="muted">
+        Publicaciones activas, con las más denunciadas primero. Puedes retirar las que incumplan las
+        normas; la acción queda auditada.
+      </p>
+
+      <form className="card stack" onSubmit={aplicar}>
+        <div className="grid">
+          <div className="field">
+            <label className="field__label" htmlFor="mod-zona">
+              Zona
+            </label>
+            <select id="mod-zona" name="zona" className="input" value={borrador.zona} onChange={cambiarFiltro}>
+              <option value="">Todas las zonas</option>
+              {zonas.map((z) => (
+                <option key={z._id} value={z._id}>
+                  {z.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor="mod-desde">
+              Desde
+            </label>
+            <input id="mod-desde" name="desde" type="date" className="input" value={borrador.desde} onChange={cambiarFiltro} />
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor="mod-hasta">
+              Hasta
+            </label>
+            <input id="mod-hasta" name="hasta" type="date" className="input" value={borrador.hasta} onChange={cambiarFiltro} />
+          </div>
+        </div>
+
+        {errorFiltro && (
+          <p className="alert alert--error" role="alert">
+            {errorFiltro}
+          </p>
+        )}
+
+        <div className="row">
+          <button type="submit" className="btn btn--secondary">
+            Aplicar filtros
+          </button>
+          <button type="button" className="btn btn--ghost" onClick={limpiar}>
+            Limpiar
+          </button>
+        </div>
+      </form>
+
+      {cargando && (
+        <div className="state" role="status">
+          <div className="spinner" aria-hidden="true" />
+          <p>Cargando publicaciones…</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="card state" role="alert">
+          <p className="state__title">No se pudieron cargar las publicaciones</p>
+          <p>{error}</p>
+          <button type="button" className="btn btn--primary" onClick={recargar}>
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {!cargando && !error && publicaciones.length === 0 && (
+        <div className="card state">
+          <p className="state__title">Sin publicaciones</p>
+          <p>No hay publicaciones activas con estos filtros.</p>
+        </div>
+      )}
+
+      {publicaciones.map((p) => (
+        <PostCard key={p._id} post={p} moderacion onActualizada={reemplazar} onRetirada={quitar} />
+      ))}
+    </>
+  )
+}
+
+export default function GestorPage() {
+  const [vista, setVista] = useState('zonas')
+
+  return (
+    <div className="page">
+      <div>
+        <h1 className="page__title">Panel del gestor</h1>
+        <p className="page__subtitle">Zonas, disputas de reportes y moderación del feed.</p>
+      </div>
+
+      <div className="chips" role="group" aria-label="Secciones del panel">
+        {VISTAS.map((v) => (
+          <button
+            key={v.valor}
+            type="button"
+            className="chip"
+            aria-pressed={vista === v.valor}
+            onClick={() => setVista(v.valor)}
+          >
+            {v.etiqueta}
+          </button>
+        ))}
+      </div>
+
+      {vista === 'zonas' && <SeccionZonas />}
+      {vista === 'disputas' && <SeccionDisputas />}
+      {vista === 'moderacion' && <SeccionModeracion />}
     </div>
   )
 }

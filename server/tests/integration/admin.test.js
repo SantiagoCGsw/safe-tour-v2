@@ -1,8 +1,12 @@
+// server/tests/integration/admin.test.js
 import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
 import app from '../../src/app.js'
 import User from '../../src/models/User.model.js'
 import Zone from '../../src/models/Zone.model.js'
+import Report from '../../src/models/Report.model.js'
+import Post from '../../src/models/Post.model.js'
+import Config from '../../src/models/Config.model.js'
 import AuditLog from '../../src/models/AuditLog.model.js'
 import { signToken } from '../../src/utils/generateToken.js'
 
@@ -29,6 +33,7 @@ const cuentaNueva = {
 beforeAll(async () => {
   await User.init()
   await AuditLog.init()
+  await Config.init()
 })
 
 describe('HU-15 listado de usuarios', () => {
@@ -240,6 +245,23 @@ describe('HU-14 estadísticas', () => {
     expect(res.body.stats.zonas.porTipo).toEqual({ turistica: 0, cultural: 1, peligrosa: 0, segura: 1 })
   })
 
+  it('cuenta reportes y publicaciones activos', async () => {
+    const { user: admin, token } = await crearUsuario('admin', 'admin@correo.com')
+    await Report.create([
+      { titulo: 'Reporte uno', tipo: 'robo', ubicacion: { lat: 4.598, lng: -74.068 }, autor: admin._id },
+      { titulo: 'Reporte dos', tipo: 'obra', ubicacion: { lat: 4.598, lng: -74.068 }, autor: admin._id, activo: false },
+    ])
+    await Post.create([
+      { autor: admin._id, contenido: 'Primera publicación' },
+      { autor: admin._id, contenido: 'Segunda publicación' },
+      { autor: admin._id, contenido: 'Retirada', activo: false },
+    ])
+    const res = await request(app).get('/api/admin/stats').set(auth(token))
+    expect(res.status).toBe(200)
+    expect(res.body.stats.reportes).toBe(1)
+    expect(res.body.stats.publicaciones).toBe(2)
+  })
+
   it('filtra por rango de fechas', async () => {
     const { token } = await crearUsuario('admin', 'admin@correo.com')
     const manana = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
@@ -260,5 +282,107 @@ describe('HU-14 estadísticas', () => {
     const { token } = await crearUsuario('admin', 'admin@correo.com')
     const res = await request(app).get('/api/admin/stats').query(query).set(auth(token))
     expect(res.status).toBe(400)
+  })
+})
+
+describe('HU-16 parámetros del sistema', () => {
+  it('devuelve los valores por defecto y mantiene un único documento', async () => {
+    const { token } = await crearUsuario('admin', 'admin@correo.com')
+    const primera = await request(app).get('/api/admin/config').set(auth(token))
+    const segunda = await request(app).get('/api/admin/config').set(auth(token))
+    expect(primera.status).toBe(200)
+    expect(primera.body.config).toMatchObject({
+      umbralAltoRiesgo: 5,
+      vigenciaReporteHoras: 72,
+      quorum: 3,
+      plazoVotacionHoras: 24,
+    })
+    expect(segunda.body.config._id).toBe(primera.body.config._id)
+    expect(await Config.countDocuments()).toBe(1)
+  })
+
+  it.each(['turista', 'gestor'])('rechaza a un %s con 403 en lectura y escritura', async (rol) => {
+    const { token } = await crearUsuario(rol, `${rol}@correo.com`)
+    const lectura = await request(app).get('/api/admin/config').set(auth(token))
+    const escritura = await request(app).put('/api/admin/config').set(auth(token)).send({ quorum: 9 })
+    expect(lectura.status).toBe(403)
+    expect(escritura.status).toBe(403)
+    expect((await Config.obtener()).quorum).toBe(3)
+  })
+
+  it('rechaza sin sesión con 401', async () => {
+    const lectura = await request(app).get('/api/admin/config')
+    const escritura = await request(app).put('/api/admin/config').send({ quorum: 9 })
+    expect(lectura.status).toBe(401)
+    expect(escritura.status).toBe(401)
+  })
+
+  it('actualiza solo los campos enviados y deja auditoría con el valor anterior', async () => {
+    const { user: admin, token } = await crearUsuario('admin', 'admin@correo.com')
+    const res = await request(app)
+      .put('/api/admin/config')
+      .set(auth(token))
+      .send({ quorum: 5, plazoVotacionHoras: 48 })
+    expect(res.status).toBe(200)
+    expect(res.body.config).toMatchObject({
+      umbralAltoRiesgo: 5,
+      vigenciaReporteHoras: 72,
+      quorum: 5,
+      plazoVotacionHoras: 48,
+    })
+
+    const lectura = await request(app).get('/api/admin/config').set(auth(token))
+    expect(lectura.body.config.quorum).toBe(5)
+
+    const auditoria = await AuditLog.findOne({ accion: 'config.actualizar' })
+    expect(String(auditoria.actor)).toBe(String(admin._id))
+    expect(auditoria.detalle).toEqual({
+      de: { quorum: 3, plazoVotacionHoras: 24 },
+      a: { quorum: 5, plazoVotacionHoras: 48 },
+    })
+  })
+
+  it('el nuevo plazo se aplica a los reportes creados después', async () => {
+    const { token: tokenAdmin } = await crearUsuario('admin', 'admin@correo.com')
+    const { token } = await crearUsuario('turista', 'turista@correo.com')
+    await request(app).put('/api/admin/config').set(auth(tokenAdmin)).send({ plazoVotacionHoras: 2 })
+
+    const antes = Date.now()
+    const res = await request(app)
+      .post('/api/reports')
+      .set(auth(token))
+      .send({ titulo: 'Hurto de celular', tipo: 'robo', ubicacion: { lat: 4.598, lng: -74.068 } })
+    expect(res.status).toBe(201)
+
+    const cierre = new Date(res.body.reporte.cierreVotacion).getTime()
+    const dosHorasMs = 2 * 60 * 60 * 1000
+    expect(cierre).toBeGreaterThanOrEqual(antes + dosHorasMs - 1000)
+    expect(cierre).toBeLessThanOrEqual(Date.now() + dosHorasMs + 1000)
+  })
+
+  it.each([
+    ['cuerpo vacío', {}],
+    ['campo desconocido', { clave: 'otra' }],
+    ['campo extra junto a uno válido', { quorum: 4, activo: true }],
+    ['quórum en cero', { quorum: 0 }],
+    ['quórum sobre el máximo', { quorum: 1001 }],
+    ['umbral en cero', { umbralAltoRiesgo: 0 }],
+    ['vigencia sobre el máximo', { vigenciaReporteHoras: 721 }],
+    ['plazo sobre el máximo', { plazoVotacionHoras: 337 }],
+    ['número decimal', { quorum: 2.5 }],
+    ['número como texto', { quorum: '5' }],
+    ['valor negativo', { plazoVotacionHoras: -1 }],
+  ])('responde 400 por %s y no cambia la configuración', async (_caso, cuerpo) => {
+    const { token } = await crearUsuario('admin', 'admin@correo.com')
+    const res = await request(app).put('/api/admin/config').set(auth(token)).send(cuerpo)
+    expect(res.status).toBe(400)
+    const config = await Config.obtener()
+    expect(config).toMatchObject({
+      umbralAltoRiesgo: 5,
+      vigenciaReporteHoras: 72,
+      quorum: 3,
+      plazoVotacionHoras: 24,
+    })
+    expect(await AuditLog.countDocuments({ accion: 'config.actualizar' })).toBe(0)
   })
 })

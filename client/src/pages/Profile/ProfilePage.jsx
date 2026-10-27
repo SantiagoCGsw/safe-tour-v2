@@ -1,15 +1,51 @@
-import { useState } from 'react'
+// client/src/pages/Profile/ProfilePage.jsx
+import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { actualizarPerfil } from '../../api/auth.js'
+import { misReportes } from '../../api/reports.js'
 import { mensajeDeError } from '../../api/client.js'
 
 const ETIQUETA_ROL = { turista: 'Turista', gestor: 'Gestor', admin: 'Administrador' }
+
+const ETIQUETA_TIPO = {
+  robo: 'Robo',
+  accidente: 'Accidente',
+  peligro: 'Peligro',
+  obra: 'Obra',
+  turismo: 'Turismo',
+}
+
+const ESTADO = {
+  pendiente: { etiqueta: 'En votación', clase: 'badge--warn' },
+  disputa: { etiqueta: 'En revisión', clase: 'badge--warn' },
+  confirmado: { etiqueta: 'Confirmado', clase: 'badge--ok' },
+  publicado: { etiqueta: 'Publicado', clase: 'badge--ok' },
+  rechazado: { etiqueta: 'Rechazado', clase: 'badge--danger' },
+}
 
 export default function ProfilePage() {
   const { user, actualizarUsuario } = useAuth()
   const [form, setForm] = useState({ nombre: user.nombre, fotoPerfil: user.fotoPerfil ?? '' })
   const [aviso, setAviso] = useState({ tipo: '', texto: '' })
   const [enviando, setEnviando] = useState(false)
+  const [recarga, setRecarga] = useState(0)
+  const [historial, setHistorial] = useState({ clave: null, reportes: [], error: '' })
+
+  useEffect(() => {
+    let activo = true
+    misReportes()
+      .then((reportes) => activo && setHistorial({ clave: recarga, reportes, error: '' }))
+      .catch(
+        (err) => activo && setHistorial({ clave: recarga, reportes: [], error: mensajeDeError(err) }),
+      )
+    return () => {
+      activo = false
+    }
+  }, [recarga])
+
+  const cargandoHistorial = historial.clave !== recarga
+  const reportes = cargandoHistorial ? [] : historial.reportes
+  const errorHistorial = cargandoHistorial ? '' : historial.error
 
   const cambiar = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }))
 
@@ -53,7 +89,7 @@ export default function ProfilePage() {
             </span>
           )}
           <div>
-            <h2 id="datos-titulo" className="card__title" style={{ marginBottom: 0 }}>
+            <h2 id="datos-titulo" className="card__title">
               {user.nombre}
             </h2>
             <p className="muted">{user.email}</p>
@@ -102,14 +138,55 @@ export default function ProfilePage() {
         </form>
       </section>
 
-      <section className="card" aria-labelledby="historial-titulo">
+      <section className="card stack" aria-labelledby="historial-titulo">
         <h2 id="historial-titulo" className="card__title">
           Historial de reportes
         </h2>
-        <div className="state">
-          <p className="state__title">Aún no disponible</p>
-          <p>Tus reportes aparecerán aquí cuando el módulo de reportes esté implementado.</p>
-        </div>
+
+        {cargandoHistorial && (
+          <div className="state" role="status">
+            <div className="spinner" aria-hidden="true" />
+            <p>Cargando historial…</p>
+          </div>
+        )}
+
+        {errorHistorial && (
+          <div className="state" role="alert">
+            <p className="state__title">No se pudo cargar el historial</p>
+            <p>{errorHistorial}</p>
+            <button type="button" className="btn btn--primary" onClick={() => setRecarga((n) => n + 1)}>
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {!cargandoHistorial && !errorHistorial && reportes.length === 0 && (
+          <div className="state">
+            <p className="state__title">Sin reportes</p>
+            <p>Aún no has reportado incidentes. Tus reportes aparecerán aquí.</p>
+          </div>
+        )}
+
+        {reportes.length > 0 && (
+          <ul className="list">
+            {reportes.map((r) => (
+              <li key={r._id} className="list__item">
+                <div>
+                  <strong>{r.titulo}</strong>
+                  <p className="muted">
+                    {ETIQUETA_TIPO[r.tipo] ?? r.tipo} · {new Date(r.createdAt).toLocaleString('es-CO')}
+                  </p>
+                  <p className="muted">
+                    {r.confirmaciones} confirman · {r.rechazos} rechazan
+                  </p>
+                </div>
+                <span className={`badge ${ESTADO[r.estado]?.clase ?? ''}`}>
+                  {ESTADO[r.estado]?.etiqueta ?? r.estado}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   )

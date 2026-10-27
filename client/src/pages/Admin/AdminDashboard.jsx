@@ -1,3 +1,4 @@
+// client/src/pages/Admin/AdminDashboard.jsx
 import { useEffect, useState } from 'react'
 import Modal from '../../components/common/Modal.jsx'
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx'
@@ -9,6 +10,8 @@ import {
   crearCuenta,
   cambiarRol,
   cambiarEstado,
+  obtenerConfig,
+  actualizarConfig,
 } from '../../api/admin.js'
 
 const ROLES = ['turista', 'gestor', 'admin']
@@ -21,12 +24,46 @@ const ETIQUETA_TIPO = {
 }
 const CUENTA_VACIA = { nombre: '', email: '', password: '', rol: 'gestor' }
 
+const PARAMETROS = [
+  {
+    campo: 'umbralAltoRiesgo',
+    etiqueta: 'Umbral de alto riesgo',
+    ayuda: 'Reportes vigentes en una zona para clasificarla como de alto riesgo.',
+    min: 1,
+    max: 1000,
+  },
+  {
+    campo: 'vigenciaReporteHoras',
+    etiqueta: 'Vigencia de un reporte (horas)',
+    ayuda: 'Tiempo durante el que un reporte cuenta en el mapa de calor.',
+    min: 1,
+    max: 720,
+  },
+  {
+    campo: 'quorum',
+    etiqueta: 'Quórum de votación',
+    ayuda: 'Votos mínimos para que la votación de un reporte no pase a disputa.',
+    min: 1,
+    max: 1000,
+  },
+  {
+    campo: 'plazoVotacionHoras',
+    etiqueta: 'Plazo de votación (horas)',
+    ayuda: 'Tiempo que permanece abierta la votación de un reporte nuevo.',
+    min: 1,
+    max: 336,
+  },
+]
+
 const aRango = ({ desde, hasta }) => {
   const rango = {}
   if (desde) rango.desde = new Date(`${desde}T00:00:00`).toISOString()
   if (hasta) rango.hasta = new Date(`${hasta}T23:59:59.999`).toISOString()
   return rango
 }
+
+const aTexto = (config) =>
+  Object.fromEntries(PARAMETROS.map(({ campo }) => [campo, String(config[campo])]))
 
 function useDatos(clave, cargar) {
   const [res, setRes] = useState({ clave: null, datos: null, error: '' })
@@ -69,6 +106,95 @@ function Estado({ cargando, error, onReintentar, children }) {
   return children
 }
 
+function ParametrosForm({ config }) {
+  const [base, setBase] = useState(config)
+  const [valores, setValores] = useState(() => aTexto(config))
+  const [aviso, setAviso] = useState({ tipo: '', texto: '' })
+  const [enviando, setEnviando] = useState(false)
+
+  const cambiar = (e) => setValores((v) => ({ ...v, [e.target.name]: e.target.value }))
+
+  const guardar = async (e) => {
+    e.preventDefault()
+    setAviso({ tipo: '', texto: '' })
+
+    const cambios = {}
+    for (const { campo, etiqueta, min, max } of PARAMETROS) {
+      const texto = valores[campo].trim()
+      const numero = Number(texto)
+      if (texto === '' || !Number.isInteger(numero) || numero < min || numero > max) {
+        setAviso({
+          tipo: 'error',
+          texto: `${etiqueta}: ingresa un número entero entre ${min} y ${max}`,
+        })
+        return
+      }
+      if (numero !== base[campo]) cambios[campo] = numero
+    }
+
+    if (Object.keys(cambios).length === 0) {
+      setAviso({ tipo: 'info', texto: 'No hay cambios por guardar' })
+      return
+    }
+
+    setEnviando(true)
+    try {
+      const actualizada = await actualizarConfig(cambios)
+      setBase(actualizada)
+      setValores(aTexto(actualizada))
+      setAviso({ tipo: 'success', texto: 'Parámetros actualizados' })
+    } catch (err) {
+      setAviso({ tipo: 'error', texto: mensajeDeError(err, 'No se pudieron guardar los parámetros') })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <form className="stack" onSubmit={guardar} noValidate>
+      <div className="grid">
+        {PARAMETROS.map(({ campo, etiqueta, ayuda, min, max }) => (
+          <div key={campo} className="field">
+            <label className="field__label" htmlFor={`param-${campo}`}>
+              {etiqueta}
+            </label>
+            <input
+              id={`param-${campo}`}
+              name={campo}
+              type="number"
+              inputMode="numeric"
+              className="input"
+              min={min}
+              max={max}
+              step={1}
+              value={valores[campo]}
+              onChange={cambiar}
+              disabled={enviando}
+              required
+            />
+            <span className="field__hint">{ayuda}</span>
+          </div>
+        ))}
+      </div>
+
+      {aviso.texto && (
+        <p
+          className={`alert alert--${aviso.tipo === 'error' ? 'error' : aviso.tipo}`}
+          role={aviso.tipo === 'error' ? 'alert' : 'status'}
+        >
+          {aviso.texto}
+        </p>
+      )}
+
+      <div className="row">
+        <button type="submit" className="btn btn--primary" disabled={enviando}>
+          {enviando ? 'Guardando…' : 'Guardar parámetros'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
 export default function AdminDashboard() {
   const { user: yo } = useAuth()
   const [version, setVersion] = useState(0)
@@ -89,6 +215,9 @@ export default function AdminDashboard() {
 
   const claveUsuarios = `${filtroRol}:${version}`
   const usuarios = useDatos(claveUsuarios, () => listarUsuarios(filtroRol ? { rol: filtroRol } : {}))
+
+  const claveConfig = `config:${version}`
+  const configuracion = useDatos(claveConfig, obtenerConfig)
 
   const aplicarFiltros = (e) => {
     e.preventDefault()
@@ -166,7 +295,7 @@ export default function AdminDashboard() {
       <div className="row row--between">
         <div>
           <h1 className="page__title">Panel de administración</h1>
-          <p className="page__subtitle">Estadísticas del sistema y gestión de cuentas.</p>
+          <p className="page__subtitle">Estadísticas, parámetros del sistema y gestión de cuentas.</p>
         </div>
         <button type="button" className="btn btn--primary" onClick={abrirCuenta}>
           Crear cuenta
@@ -182,12 +311,12 @@ export default function AdminDashboard() {
         </p>
       )}
 
-      <section className="card" aria-labelledby="stats-titulo">
+      <section className="card stack" aria-labelledby="stats-titulo">
         <h2 id="stats-titulo" className="card__title">
           Estadísticas
         </h2>
 
-        <form className="row" onSubmit={aplicarFiltros} style={{ marginBottom: 'var(--space-4)' }}>
+        <form className="row" onSubmit={aplicarFiltros}>
           <div className="field">
             <label className="field__label" htmlFor="desde">
               Desde
@@ -200,10 +329,10 @@ export default function AdminDashboard() {
             </label>
             <input id="hasta" type="date" className="input" value={filtros.hasta} onChange={(e) => setFiltros((f) => ({ ...f, hasta: e.target.value }))} />
           </div>
-          <button type="submit" className="btn btn--secondary" style={{ alignSelf: 'flex-end' }}>
+          <button type="submit" className="btn btn--secondary">
             Aplicar
           </button>
-          <button type="button" className="btn btn--ghost" style={{ alignSelf: 'flex-end' }} onClick={recargar}>
+          <button type="button" className="btn btn--ghost" onClick={recargar}>
             Actualizar
           </button>
         </form>
@@ -248,9 +377,21 @@ export default function AdminDashboard() {
         </Estado>
       </section>
 
-      <section className="card" aria-labelledby="usuarios-titulo">
-        <div className="row row--between" style={{ marginBottom: 'var(--space-3)' }}>
-          <h2 id="usuarios-titulo" className="card__title" style={{ marginBottom: 0 }}>
+      <section className="card stack" aria-labelledby="params-titulo">
+        <h2 id="params-titulo" className="card__title">
+          Parámetros del sistema
+        </h2>
+
+        <Estado cargando={configuracion.cargando} error={configuracion.error} onReintentar={recargar}>
+          {configuracion.datos && (
+            <ParametrosForm key={configuracion.datos.updatedAt} config={configuracion.datos} />
+          )}
+        </Estado>
+      </section>
+
+      <section className="card stack" aria-labelledby="usuarios-titulo">
+        <div className="row row--between">
+          <h2 id="usuarios-titulo" className="card__title">
             Usuarios
           </h2>
           <div className="field">

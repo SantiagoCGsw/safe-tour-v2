@@ -1,3 +1,4 @@
+// server/src/app.js
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -13,6 +14,7 @@ import placesRoutes from './routes/places.routes.js'
 import votesRoutes from './routes/votes.routes.js'
 import panicRoutes from './routes/panic.routes.js'
 import routingRoutes from './routes/routing.routes.js'
+import postsRoutes from './routes/posts.routes.js'
 
 const app = express()
 
@@ -43,6 +45,7 @@ app.use('/api/places', placesRoutes)
 app.use('/api/votes', votesRoutes)
 app.use('/api/panic', panicRoutes)
 app.use('/api/routing', routingRoutes)
+app.use('/api/posts', postsRoutes)
 
 app.use(notFound)
 app.use(errorHandler)
