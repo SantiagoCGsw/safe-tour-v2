@@ -1,8 +1,10 @@
+// client/src/App.jsx
 import { Suspense, lazy } from 'react'
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './context/AuthContext.jsx'
 import Navbar from './components/common/Navbar.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
+import ChatWidget from './components/chatbot/ChatWidget.jsx'
 
 const Login = lazy(() => import('./pages/Auth/Login.jsx'))
 const Register = lazy(() => import('./pages/Auth/Register.jsx'))
@@ -46,6 +48,9 @@ function Layout() {
         Saltar al contenido
       </a>
       <Navbar />
+      <div className="page">
+        <ChatWidget />
+      </div>
       <main id="contenido" className="app-main">
         <Suspense fallback={<Cargando />}>
           <Outlet />

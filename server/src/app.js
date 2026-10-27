@@ -15,6 +15,7 @@ import votesRoutes from './routes/votes.routes.js'
 import panicRoutes from './routes/panic.routes.js'
 import routingRoutes from './routes/routing.routes.js'
 import postsRoutes from './routes/posts.routes.js'
+import chatbotRoutes from './routes/chatbot.routes.js'
 
 const app = express()
 
@@ -46,6 +47,7 @@ app.use('/api/votes', votesRoutes)
 app.use('/api/panic', panicRoutes)
 app.use('/api/routing', routingRoutes)
 app.use('/api/posts', postsRoutes)
+app.use('/api/chatbot', chatbotRoutes)
 
 app.use(notFound)
 app.use(errorHandler)
