@@ -1,4 +1,5 @@
-// server/src/index.js
+
+ // server/src/index.js
 import { randomBytes, randomInt } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import app from './app.js'
@@ -15,7 +16,8 @@ const rectangulo = (sur, oeste, norte, este) => [
   { lat: norte, lng: oeste },
 ]
 
-const AVISO_DEMO = 'Zona de demostración con límites aproximados. No refleja datos reales.'
+const AVISO_DEMO =
+  'Zona de demostración con límites aproximados. No refleja datos reales.'
 
 const ZONAS_DEMO = [
   {
@@ -51,29 +53,52 @@ const ZONAS_DEMO = [
 const sembrarDemo = async () => {
   const clave = `Demo${randomInt(100000, 999999)}${randomBytes(4).toString('hex')}`
   const hash = await bcrypt.hash(clave, env.BCRYPT_COST)
+
   const admin = await User.create({
     nombre: 'Admin Demo',
     email: 'admin@safetour.demo',
     password: hash,
     rol: 'admin',
   })
+
   await User.create({
     nombre: 'Turista Demo',
     email: 'turista@safetour.demo',
     password: hash,
     rol: 'turista',
   })
-  for (const zona of ZONAS_DEMO) await crearZona(zona, admin._id)
 
-  console.log('Modo demostración: base de datos en memoria con datos de ejemplo. Se borra al detener el servidor.')
-  console.log(`Usuarios de ejemplo: admin@safetour.demo y turista@safetour.demo | contraseña: ${clave}`)
+  for (const zona of ZONAS_DEMO) {
+    await crearZona(zona, admin._id)
+  }
+
+  console.log(
+    'Modo demostración: base de datos en memoria con datos de ejemplo. Se borra al detener el servidor.'
+  )
+  console.log(
+    `Usuarios de ejemplo: admin@safetour.demo y turista@safetour.demo | contraseña: ${clave}`
+  )
 }
 
 try {
+  console.log('Iniciando conexión con MongoDB...')
   await connectDB()
-  if (esModoMemoria()) await sembrarDemo()
+
+  console.log('Conexión a la base de datos completada.')
+
+  if (esModoMemoria()) {
+    await sembrarDemo()
+  }
 } catch (err) {
-  console.error(`No se pudo conectar a MongoDB (${err.name})`)
+  console.error('No se pudo conectar a MongoDB.')
+  console.error('Tipo de error:', err?.name ?? 'Desconocido')
+  console.error('Código:', err?.code ?? 'No disponible')
+  console.error('Mensaje:', err?.message ?? 'Sin mensaje')
+
+  if (err?.cause) {
+    console.error('Causa:', err.cause.message ?? err.cause)
+  }
+
   process.exit(1)
 }
 
@@ -85,8 +110,14 @@ const servidor = app.listen(env.PORT, () => {
 
 const cerrar = () => {
   detenerScheduler()
+
   servidor.close(async () => {
-    await disconnectDB()
+    try {
+      await disconnectDB()
+    } catch (err) {
+      console.error('Error al cerrar la conexión:', err.message)
+    }
+
     process.exit(0)
   })
 }
