@@ -12,8 +12,15 @@ const URL_VALHALLA = 'https://valhalla1.openstreetmap.de/route'
 const URL_NOMINATIM = 'https://nominatim.openstreetmap.org/search'
 const USER_AGENT = 'SafeTour/2.0 (proyecto academico)'
 
-// Proveedor gratuito sin clave: ROUTING_PROVIDER=osm (Valhalla + Nominatim de OpenStreetMap)
-const usaOsm = () => process.env.ROUTING_PROVIDER === 'osm'
+// Proveedor gratuito sin clave (Valhalla + Nominatim de OpenStreetMap).
+// Se usa si ROUTING_PROVIDER=osm, o automáticamente cuando no hay ORS_API_KEY.
+// ROUTING_PROVIDER=ors fuerza OpenRouteService.
+const usaOsm = () => {
+  const proveedor = process.env.ROUTING_PROVIDER
+  if (proveedor === 'osm') return true
+  if (proveedor === 'ors') return false
+  return !process.env.ORS_API_KEY
+}
 
 const PERFILES_VALHALLA = {
   'a-pie': 'pedestrian',

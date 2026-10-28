@@ -240,6 +240,7 @@ describe('HU-06 fallos del servicio de rutas', () => {
   it('responde 503 si no hay clave configurada y no llama al proveedor', async () => {
     const { token } = await crearUsuario()
     vi.stubEnv('ORS_API_KEY', '')
+    vi.stubEnv('ROUTING_PROVIDER', 'ors')
     const res = await calcular(token)
     expect(res.status).toBe(503)
     expect(res.body).toEqual({ message: 'Servicio de rutas no configurado' })
@@ -366,6 +367,7 @@ describe('HU-06 búsqueda de direcciones para el destino', () => {
   it('responde 503 si no hay clave configurada y no llama al proveedor', async () => {
     const { token } = await crearUsuario()
     vi.stubEnv('ORS_API_KEY', '')
+    vi.stubEnv('ROUTING_PROVIDER', 'ors')
     const res = await buscarDireccion(token)
     expect(res.status).toBe(503)
     expect(fetchMock).not.toHaveBeenCalled()
