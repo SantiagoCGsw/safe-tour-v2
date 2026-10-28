@@ -16,6 +16,8 @@ const esquema = z.object({
 
 const resultado = esquema.safeParse(process.env)
 
+console.log('DIAG env:', ['JWT_SECRET', 'CORS_ORIGINS', 'MONGODB_URI'].map((k) => `${k}=${process.env[k] ? process.env[k].length + ' chars' : 'FALTA'}`).join(' | '))
+
 if (!resultado.success) {
   const campos = [...new Set(resultado.error.issues.map((i) => i.path.join('.')))].join(', ')
   throw new Error(`Configuración inválida en: ${campos}`)
