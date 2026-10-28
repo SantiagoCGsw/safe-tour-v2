@@ -12,7 +12,7 @@ Un turista o residente ve en un mapa el riesgo por zona, reporta incidentes, con
 - Ubicación en tiempo real y mapa de calor calculado con reportes confirmados o publicados, activos y vigentes.
 - Reporte de incidentes (accidente, robo, obra, peligro, turismo), con límite de 10 por hora para turistas.
 - Alertas por zona en el cliente (geocercas y notificación local mientras la app está abierta).
-- Ruta segura por modo de transporte: se compara la ruta directa con otra que evita zonas de riesgo alto. En transporte público el cálculo es aproximado.
+- Ruta segura por modo de transporte: se compara la ruta directa con otra que evita zonas de riesgo alto. En transporte público el cálculo es aproximado. El destino se elige en la página de sitios turísticos entre los sitios de la plataforma (con buscador), tocando el mapa o escribiendo una dirección (búsqueda de direcciones de OpenRouteService, limitada a Colombia).
 - Botón de pánico con confirmación en dos pasos, límite de 3 activaciones por hora y registro de auditoría. Envía solo a contactos que el usuario registró.
 - Feed de publicaciones con comentarios, reacciones, denuncias y moderación.
 - Asistente conversacional (ver `ml/README.md`).

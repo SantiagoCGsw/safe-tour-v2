@@ -2,8 +2,11 @@ import { AppError } from '../middlewares/error.middleware.js'
 import { zonasDeAltoRiesgo, puntoEnPoligono } from './risk.service.js'
 
 const URL_BASE = 'https://api.openrouteservice.org/v2/directions'
+const URL_DIRECCIONES = 'https://api.openrouteservice.org/geocode/search'
 const TIEMPO_MAXIMO_MS = 10000
 const PROPORCION_RIESGO_ALTO = 0.15
+const MAXIMO_DIRECCIONES = 5
+const CENTRO_BOGOTA = { lat: 4.711, lng: -74.0721 }
 
 const PERFILES = {
   'a-pie': 'foot-walking',
@@ -74,6 +77,44 @@ const formatear = (nombre, ruta, zonasRiesgo) => ({
   coordenadas: ruta.coordenadas,
   ...evaluarRiesgo(ruta.coordenadas, zonasRiesgo),
 })
+
+export const buscarDirecciones = async (texto) => {
+  const clave = process.env.ORS_API_KEY
+  if (!clave) throw new AppError(503, 'Servicio de rutas no configurado')
+
+  const parametros = new URLSearchParams({
+    text: texto,
+    size: String(MAXIMO_DIRECCIONES),
+    'boundary.country': 'CO',
+    'focus.point.lat': String(CENTRO_BOGOTA.lat),
+    'focus.point.lon': String(CENTRO_BOGOTA.lng),
+  })
+
+  let datos
+  try {
+    const respuesta = await fetch(`${URL_DIRECCIONES}?${parametros}`, {
+      headers: { Authorization: clave },
+      signal: AbortSignal.timeout(TIEMPO_MAXIMO_MS),
+    })
+    if (!respuesta.ok) throw new Error('respuesta no válida')
+    datos = await respuesta.json()
+  } catch {
+    throw new AppError(502, 'No se pudo buscar la dirección')
+  }
+
+  const lugares = Array.isArray(datos?.features) ? datos.features : []
+  const resultados = lugares
+    .map((lugar) => ({
+      nombre: lugar?.properties?.label,
+      lat: lugar?.geometry?.coordinates?.[1],
+      lng: lugar?.geometry?.coordinates?.[0],
+    }))
+    .filter(
+      (r) => typeof r.nombre === 'string' && Number.isFinite(r.lat) && Number.isFinite(r.lng),
+    )
+
+  return { resultados }
+}
 
 export const obtenerRutas = async ({ origen, destino, modo }) => {
   const perfil = PERFILES[modo]

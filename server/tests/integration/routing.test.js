@@ -286,3 +286,127 @@ describe('HU-06 validación y acceso', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+const buscarDireccion = (token, consulta = 'Carrera 7 # 32-16') =>
+  request(app).get('/api/routing/direcciones').query({ q: consulta }).set(auth(token))
+
+const respuestaDirecciones = (lugares) => ({
+  ok: true,
+  json: async () => ({
+    features: lugares.map(([label, lat, lng]) => ({
+      properties: { label },
+      geometry: { coordinates: [lng, lat] },
+    })),
+  }),
+})
+
+describe('HU-06 búsqueda de direcciones para el destino', () => {
+  it('devuelve nombre y coordenadas con lat y lng en el orden correcto', async () => {
+    const { token } = await crearUsuario()
+    fetchMock.mockResolvedValueOnce(
+      respuestaDirecciones([
+        ['Carrera 7 # 32-16, Bogotá', 4.6176, -74.0675],
+        ['Carrera 7 # 32-20, Bogotá', 4.6178, -74.0674],
+      ]),
+    )
+
+    const res = await buscarDireccion(token)
+    expect(res.status).toBe(200)
+    expect(res.body.resultados).toEqual([
+      { nombre: 'Carrera 7 # 32-16, Bogotá', lat: 4.6176, lng: -74.0675 },
+      { nombre: 'Carrera 7 # 32-20, Bogotá', lat: 4.6178, lng: -74.0674 },
+    ])
+  })
+
+  it('consulta el geocodificador limitado a Colombia, con la clave en la cabecera y no en la URL', async () => {
+    const { token } = await crearUsuario()
+    fetchMock.mockResolvedValueOnce(respuestaDirecciones([]))
+    await buscarDireccion(token, 'Plaza de Bolívar')
+
+    const [url, opciones] = fetchMock.mock.calls[0]
+    const consulta = new URL(url)
+    expect(consulta.pathname).toBe('/geocode/search')
+    expect(consulta.searchParams.get('text')).toBe('Plaza de Bolívar')
+    expect(consulta.searchParams.get('boundary.country')).toBe('CO')
+    expect(opciones.headers.Authorization).toBe(CLAVE_ORS)
+    expect(url).not.toContain(CLAVE_ORS)
+  })
+
+  it('devuelve lista vacía cuando no hay coincidencias', async () => {
+    const { token } = await crearUsuario()
+    fetchMock.mockResolvedValueOnce(respuestaDirecciones([]))
+    const res = await buscarDireccion(token)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ resultados: [] })
+  })
+
+  it('descarta resultados sin nombre o sin coordenadas válidas', async () => {
+    const { token } = await crearUsuario()
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        features: [
+          { properties: { label: 'Sin geometría' } },
+          { properties: {}, geometry: { coordinates: [-74.07, 4.6] } },
+          { properties: { label: 'Coordenadas rotas' }, geometry: { coordinates: ['x', 'y'] } },
+          { properties: { label: 'Válido' }, geometry: { coordinates: [-74.07, 4.6] } },
+        ],
+      }),
+    })
+    const res = await buscarDireccion(token)
+    expect(res.body.resultados).toEqual([{ nombre: 'Válido', lat: 4.6, lng: -74.07 }])
+  })
+
+  it('no filtra la clave de la API en la respuesta', async () => {
+    const { token } = await crearUsuario()
+    fetchMock.mockResolvedValueOnce(respuestaDirecciones([['Lugar', 4.6, -74.07]]))
+    const res = await buscarDireccion(token)
+    expect(JSON.stringify(res.body)).not.toContain(CLAVE_ORS)
+  })
+
+  it('responde 503 si no hay clave configurada y no llama al proveedor', async () => {
+    const { token } = await crearUsuario()
+    vi.stubEnv('ORS_API_KEY', '')
+    const res = await buscarDireccion(token)
+    expect(res.status).toBe(503)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['el proveedor responde con error', () => fetchMock.mockResolvedValueOnce(respuestaFallida)],
+    ['falla la red', () => fetchMock.mockRejectedValueOnce(new Error('sin red'))],
+    [
+      'la respuesta no es JSON válido',
+      () =>
+        fetchMock.mockResolvedValueOnce({
+          ok: true,
+          json: async () => {
+            throw new Error('json inválido')
+          },
+        }),
+    ],
+  ])('responde 502 genérico cuando %s', async (_caso, preparar) => {
+    const { token } = await crearUsuario()
+    preparar()
+    const res = await buscarDireccion(token)
+    expect(res.status).toBe(502)
+    expect(res.body).toEqual({ message: 'No se pudo buscar la dirección' })
+  })
+
+  it('exige sesión', async () => {
+    const res = await request(app).get('/api/routing/direcciones').query({ q: 'Calle 26' })
+    expect(res.status).toBe(401)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['sin texto', {}],
+    ['texto demasiado corto', { q: 'ab' }],
+    ['texto demasiado largo', { q: 'a'.repeat(101) }],
+    ['parámetro extra', { q: 'Calle 26', pais: 'US' }],
+  ])('responde 400 por %s y no llama al proveedor', async (_caso, consulta) => {
+    const { token } = await crearUsuario()
+    const res = await request(app).get('/api/routing/direcciones').query(consulta).set(auth(token))
+    expect(res.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

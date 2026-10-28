@@ -1,8 +1,9 @@
 // client/src/components/map/RoutePanel.jsx
-import { useState } from 'react'
-import { CircleMarker, Polyline } from 'react-leaflet'
+import { useEffect, useState } from 'react'
+import { CircleMarker, Polyline, useMap } from 'react-leaflet'
 import { calcularRutas } from '../../api/routing.js'
 import { mensajeDeError } from '../../api/client.js'
+import DestinoPicker from './DestinoPicker.jsx'
 
 const MODOS = [
   { valor: 'a-pie', etiqueta: 'A pie' },
@@ -30,9 +31,31 @@ const formatearDuracion = (segundos) => {
 const formatearDistancia = (metros) =>
   metros < 1000 ? `${metros} m` : `${(metros / 1000).toFixed(1)} km`
 
+// Lleva el mapa a la ruta calculada o, mientras no hay ruta, al destino elegido.
+function AjustarVista({ rutas, destino }) {
+  const map = useMap()
+  const hayRutas = rutas.length > 0
+  const lat = destino?.lat
+  const lng = destino?.lng
+
+  useEffect(() => {
+    if (!hayRutas) return
+    const puntos = rutas.flatMap((r) => r.coordenadas.map((p) => [p.lat, p.lng]))
+    map.fitBounds(puntos, { padding: [32, 32] })
+  }, [map, rutas, hayRutas])
+
+  useEffect(() => {
+    if (hayRutas || lat === undefined) return
+    map.flyTo([lat, lng], Math.max(map.getZoom(), 15))
+  }, [map, hayRutas, lat, lng])
+
+  return null
+}
+
 export function RutaLayer({ rutas, indice, destino }) {
   return (
     <>
+      <AjustarVista rutas={rutas} destino={destino} />
       {rutas.map((ruta, i) => {
         const activa = i === indice
         return (
@@ -64,6 +87,7 @@ export default function RoutePanel({
   destino,
   eligiendoDestino,
   onEligirDestino,
+  onElegirDestino,
   resultado,
   indice,
   onIndice,
@@ -132,27 +156,19 @@ export default function RoutePanel({
         </p>
       )}
 
+      <DestinoPicker
+        eligiendoEnMapa={eligiendoDestino}
+        onEligirEnMapa={onEligirDestino}
+        onElegir={onElegirDestino}
+      />
+
       <p className="muted">
         {destino
-          ? `Destino: ${destino.lat.toFixed(5)}, ${destino.lng.toFixed(5)}`
+          ? `Destino: ${destino.nombre || `${destino.lat.toFixed(5)}, ${destino.lng.toFixed(5)}`}`
           : 'Aún no elegiste un destino.'}
       </p>
 
-      {eligiendoDestino && (
-        <p className="alert alert--info" role="status">
-          Toca el mapa para fijar el destino.
-        </p>
-      )}
-
       <div className="row">
-        <button
-          type="button"
-          className="btn btn--secondary"
-          aria-pressed={eligiendoDestino}
-          onClick={() => onEligirDestino(!eligiendoDestino)}
-        >
-          {eligiendoDestino ? 'Cancelar selección' : 'Elegir destino en el mapa'}
-        </button>
         <button type="button" className="btn btn--primary" onClick={calcular} disabled={!puedeCalcular}>
           {calculando ? 'Calculando…' : 'Calcular ruta'}
         </button>

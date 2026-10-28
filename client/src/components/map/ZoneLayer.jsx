@@ -1,4 +1,5 @@
-import { Polygon, Popup } from 'react-leaflet'
+import { useEffect, useRef } from 'react'
+import { Polygon, Popup, useMap } from 'react-leaflet'
 
 const COLORES = {
   1: '#d92d20',
@@ -16,9 +17,35 @@ const RIESGO = {
   5: 'riesgo muy bajo',
 }
 
-export default function ZoneLayer({ zonas, onSelect }) {
+const ETIQUETA_TIPO = {
+  turistica: 'Turística',
+  cultural: 'Cultural',
+  peligrosa: 'Peligrosa',
+  segura: 'Segura',
+}
+
+// Lleva el mapa a las zonas cuando cambia el conjunto mostrado, para que los polígonos queden a
+// la vista aunque estén lejos de la ubicación del usuario.
+function AjustarAZonas({ zonas }) {
+  const map = useMap()
+  const ultimaClave = useRef('')
+  const clave = zonas.map((zona) => zona._id).join(',')
+
+  useEffect(() => {
+    if (!clave || clave === ultimaClave.current) return
+    ultimaClave.current = clave
+
+    const puntos = zonas.flatMap((zona) => zona.coordenadas.map((p) => [p.lat, p.lng]))
+    map.fitBounds(puntos, { padding: [32, 32], maxZoom: 16 })
+  }, [clave, zonas, map])
+
+  return null
+}
+
+export default function ZoneLayer({ zonas, onSelect, ajustar = false }) {
   return (
     <>
+      {ajustar && <AjustarAZonas zonas={zonas} />}
       {zonas.map((zona) => {
         const color = COLORES[zona.nivelSeguridad] ?? COLORES[3]
         return (
@@ -31,7 +58,14 @@ export default function ZoneLayer({ zonas, onSelect }) {
             <Popup>
               <strong>{zona.nombre}</strong>
               <br />
-              Nivel {zona.nivelSeguridad} de 5 ({RIESGO[zona.nivelSeguridad]})
+              {ETIQUETA_TIPO[zona.tipo] ?? zona.tipo} · Nivel {zona.nivelSeguridad} de 5 (
+              {RIESGO[zona.nivelSeguridad]})
+              {zona.descripcion && (
+                <>
+                  <br />
+                  {zona.descripcion}
+                </>
+              )}
             </Popup>
           </Polygon>
         )

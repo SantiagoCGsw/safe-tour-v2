@@ -14,6 +14,8 @@ export const crearLimitador = (opciones) =>
 
 export const limitadorGlobal = crearLimitador({ limit: env.RATE_LIMIT_GLOBAL_MAX })
 
+export const limitadorDirecciones = crearLimitador({ limit: 30 })
+
 export const limitadorAuth = crearLimitador({
   limit: env.RATE_LIMIT_AUTH_MAX,
   skipSuccessfulRequests: true,

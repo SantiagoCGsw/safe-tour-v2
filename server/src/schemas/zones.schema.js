@@ -61,6 +61,12 @@ export const buscarSitiosSchema = {
   }),
 }
 
+export const buscarDireccionSchema = {
+  query: z.strictObject({
+    q: z.string().trim().min(3).max(100),
+  }),
+}
+
 export const calcularRutaSchema = {
   body: z.strictObject({
     origen: punto,

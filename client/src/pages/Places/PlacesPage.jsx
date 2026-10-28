@@ -5,7 +5,6 @@ import RoutePanel, { RutaLayer } from '../../components/map/RoutePanel.jsx'
 import { buscarSitios } from '../../api/places.js'
 import { mensajeDeError } from '../../api/client.js'
 import { useGeolocation } from '../../hooks/useGeolocation.js'
-import { DESTINOS_TURISTICOS } from '../../data/destinosTuristicos.js'
 
 const CATEGORIAS = [
   { valor: '', etiqueta: 'Todos' },
@@ -58,17 +57,12 @@ export default function PlacesPage() {
     setDestino({
       lat: Number(punto.lat),
       lng: Number(punto.lng),
-      nombre: punto.nombre ?? 'Destino seleccionado',
+      nombre: punto.nombre ?? '',
       categoria: punto.categoria ?? '',
     })
     setEligiendoDestino(false)
     setRutaResultado(null)
     setRutaIndice(0)
-  }
-
-  const seleccionarSitioTuristico = (id) => {
-    const sitio = DESTINOS_TURISTICOS.find((item) => item.id === id)
-    if (sitio) alElegirDestino(sitio)
   }
 
   const alResultadoRuta = (datos) => {
@@ -82,10 +76,6 @@ export default function PlacesPage() {
     setRutaResultado(null)
     setRutaIndice(0)
   }
-
-  const sitioSeleccionado = DESTINOS_TURISTICOS.find(
-    (sitio) => sitio.lat === destino?.lat && sitio.lng === destino?.lng,
-  )
 
   return (
     <div className="page">
@@ -128,31 +118,6 @@ export default function PlacesPage() {
         ))}
       </div>
 
-      <section className="card stack" aria-labelledby="destinos-turisticos-titulo">
-        <h2 id="destinos-turisticos-titulo" className="card__title">
-          Lugares turísticos
-        </h2>
-
-        <label htmlFor="destino-turistico">Selecciona un destino</label>
-
-        <select
-          id="destino-turistico"
-          className="input"
-          value={sitioSeleccionado?.id ?? ''}
-          onChange={(event) => seleccionarSitioTuristico(event.target.value)}
-        >
-          <option value="">Elige un lugar turístico</option>
-
-          {DESTINOS_TURISTICOS.map((sitio) => (
-            <option key={sitio.id} value={sitio.id}>
-              {sitio.nombre} · {sitio.categoria}
-            </option>
-          ))}
-        </select>
-
-        <p className="muted">También puedes seleccionar un punto tocando el mapa.</p>
-      </section>
-
       <MapView position={position} onMapClick={eligiendoDestino ? alElegirDestino : undefined}>
         <RutaLayer rutas={rutaResultado?.rutas ?? []} indice={rutaIndice} destino={destino} />
         {sitios.map((s) => (
@@ -176,6 +141,7 @@ export default function PlacesPage() {
         destino={destino}
         eligiendoDestino={eligiendoDestino}
         onEligirDestino={setEligiendoDestino}
+        onElegirDestino={alElegirDestino}
         resultado={rutaResultado}
         indice={rutaIndice}
         onIndice={setRutaIndice}

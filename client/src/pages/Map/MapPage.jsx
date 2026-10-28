@@ -4,8 +4,6 @@ import MapView from '../../components/map/MapView.jsx'
 import ZoneLayer from '../../components/map/ZoneLayer.jsx'
 import HeatLayer from '../../components/map/HeatLayer.jsx'
 import ReportMarker from '../../components/map/ReportMarker.jsx'
-import TouristPlacesLayer from '../../components/map/TouristPlacesLayer.jsx'
-import RoutePanel, { RutaLayer } from '../../components/map/RoutePanel.jsx'
 import ReportForm from '../../components/reports/ReportForm.jsx'
 import Modal from '../../components/common/Modal.jsx'
 import { listarZonas } from '../../api/zones.js'
@@ -31,14 +29,6 @@ const AVISO_UBICACION = {
 
 const ESTADOS_EN_MAPA = ['confirmado', 'publicado']
 
-const RIESGO = {
-  alto: { etiqueta: 'Riesgo alto', clase: 'badge--danger' },
-  medio: { etiqueta: 'Riesgo medio', clase: 'badge--warn' },
-  bajo: { etiqueta: 'Riesgo bajo', clase: 'badge--ok' },
-}
-
-const ORDEN_RIESGO = { alto: 0, medio: 1, bajo: 2 }
-
 const TIPO_REPORTE = {
   accidente: 'accidentes',
   robo: 'robos',
@@ -49,11 +39,6 @@ const TIPO_REPORTE = {
 
 const CLAVE_SENSIBILIDAD = 'safe-tour-alertas'
 
-const SENSIBILIDADES = [
-  { valor: 'alto', etiqueta: 'Solo riesgo alto' },
-  { valor: 'medio', etiqueta: 'Riesgo medio y alto' },
-]
-
 const leerSensibilidad = () => {
   try {
     return localStorage.getItem(CLAVE_SENSIBILIDAD) === 'medio'
@@ -61,14 +46,6 @@ const leerSensibilidad = () => {
       : 'alto'
   } catch {
     return 'alto'
-  }
-}
-
-const guardarSensibilidad = (valor) => {
-  try {
-    localStorage.setItem(CLAVE_SENSIBILIDAD, valor)
-  } catch {
-    // El almacenamiento local puede estar deshabilitado.
   }
 }
 
@@ -118,18 +95,14 @@ export default function MapPage() {
     error: '',
   })
 
-  const [seleccionada, setSeleccionada] = useState(null)
   const [formAbierto, setFormAbierto] = useState(false)
   const [aviso, setAviso] = useState('')
-  const [destino, setDestino] = useState(null)
-  const [eligiendoDestino, setEligiendoDestino] = useState(false)
-  const [rutaResultado, setRutaResultado] = useState(null)
-  const [rutaIndice, setRutaIndice] = useState(0)
-  const [sensibilidad, setSensibilidad] = useState(leerSensibilidad)
-  const [permiso, setPermiso] = useState(leerPermiso)
 
   const notificadas = useRef(new Set())
   const { position, status } = useGeolocation()
+
+  const sensibilidad = leerSensibilidad()
+  const permiso = leerPermiso()
 
   const clave = `${tipo}:${recarga}`
 
@@ -249,15 +222,6 @@ export default function MapPage() {
     }
   }, [alertas, permiso])
 
-  const riesgoPorZona = mapa
-    ? [...(mapa.zonas ?? [])].sort(
-        (a, b) =>
-          (ORDEN_RIESGO[a.riesgo] ?? 3) -
-            (ORDEN_RIESGO[b.riesgo] ?? 3) ||
-          (b.reportes ?? 0) - (a.reportes ?? 0),
-      )
-    : []
-
   const alCrearReporte = (reporte) => {
     setFormAbierto(false)
 
@@ -268,51 +232,6 @@ export default function MapPage() {
     )
 
     setRecarga((n) => n + 1)
-  }
-
-  const cambiarSensibilidad = (valor) => {
-    setSensibilidad(valor)
-    guardarSensibilidad(valor)
-  }
-
-  const activarAvisos = async () => {
-    if (typeof Notification === 'undefined') {
-      setPermiso('no-soportado')
-      return
-    }
-
-    try {
-      const nuevoPermiso = await Notification.requestPermission()
-      setPermiso(nuevoPermiso)
-    } catch {
-      setPermiso('denied')
-    }
-  }
-
-  const alElegirDestino = (punto) => {
-    setDestino({
-      lat: Number(punto.lat),
-      lng: Number(punto.lng),
-      nombre: punto.nombre ?? 'Destino seleccionado',
-      categoria: punto.categoria ?? '',
-    })
-
-    setEligiendoDestino(false)
-    setRutaResultado(null)
-    setRutaIndice(0)
-    setAviso('')
-  }
-
-  const alResultadoRuta = (datos) => {
-    setRutaResultado(datos)
-    setRutaIndice(0)
-  }
-
-  const limpiarRuta = () => {
-    setDestino(null)
-    setEligiendoDestino(false)
-    setRutaResultado(null)
-    setRutaIndice(0)
   }
 
   return (
@@ -394,28 +313,13 @@ export default function MapPage() {
 
       <MapView
         position={position}
-        onMapClick={
-          eligiendoDestino ? alElegirDestino : undefined
-        }
+        centrarEnUsuario={!cargando && zonas.length === 0}
       >
-        <ZoneLayer
-          zonas={zonas}
-          onSelect={setSeleccionada}
-        />
-
-        <TouristPlacesLayer
-          onSelect={alElegirDestino}
-        />
+        <ZoneLayer zonas={zonas} ajustar />
 
         {mapa && <HeatLayer puntos={mapa.puntos ?? []} />}
 
         <ReportMarker reportes={reportesMapa} />
-
-        <RutaLayer
-          rutas={rutaResultado?.rutas ?? []}
-          indice={rutaIndice}
-          destino={destino}
-        />
       </MapView>
 
       {cargando && (
@@ -447,115 +351,6 @@ export default function MapPage() {
           <p className="state__title">Sin zonas para mostrar</p>
           <p>Aún no hay zonas registradas con este filtro.</p>
         </div>
-      )}
-
-      <RoutePanel
-        position={position}
-        destino={destino}
-        eligiendoDestino={eligiendoDestino}
-        onEligirDestino={setEligiendoDestino}
-        resultado={rutaResultado}
-        indice={rutaIndice}
-        onIndice={setRutaIndice}
-        onResultado={alResultadoRuta}
-        onLimpiar={limpiarRuta}
-      />
-
-      <section className="card stack" aria-labelledby="alertas-titulo">
-        <h2 id="alertas-titulo" className="card__title">
-          Alertas de zona
-        </h2>
-
-        <div className="chips" role="group" aria-label="Sensibilidad de las alertas">
-          {SENSIBILIDADES.map((item) => (
-            <button
-              key={item.valor}
-              type="button"
-              className="chip"
-              aria-pressed={sensibilidad === item.valor}
-              onClick={() => cambiarSensibilidad(item.valor)}
-            >
-              {item.etiqueta}
-            </button>
-          ))}
-        </div>
-
-        {permiso === 'default' && (
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            onClick={activarAvisos}
-          >
-            Activar avisos en el dispositivo
-          </button>
-        )}
-
-        {permiso === 'granted' && (
-          <p className="muted">
-            Avisos del dispositivo activos mientras la aplicación esté abierta.
-          </p>
-        )}
-
-        {permiso === 'denied' && (
-          <p className="muted">
-            Los avisos del dispositivo están bloqueados en el navegador.
-            Las alertas seguirán apareciendo en esta pantalla.
-          </p>
-        )}
-
-        {permiso === 'no-soportado' && (
-          <p className="muted">
-            Este navegador no permite notificaciones del dispositivo.
-          </p>
-        )}
-      </section>
-
-      {riesgoPorZona.length > 0 && (
-        <section className="card" aria-labelledby="riesgo-titulo">
-          <h2 id="riesgo-titulo" className="card__title">
-            Riesgo actual por zona
-          </h2>
-
-          <ul className="list">
-            {riesgoPorZona.map((zona) => {
-              const riesgo = RIESGO[zona.riesgo] ?? RIESGO.bajo
-
-              return (
-                <li key={zona.zonaId} className="list__item">
-                  <div>
-                    <strong>{zona.nombre}</strong>
-                    <p className="muted">
-                      {zona.reportes ?? 0}{' '}
-                      {(zona.reportes ?? 0) === 1
-                        ? 'reporte vigente'
-                        : 'reportes vigentes'}
-                    </p>
-                  </div>
-
-                  <span className={`badge ${riesgo.clase}`}>
-                    {riesgo.etiqueta}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-      )}
-
-      {seleccionada && (
-        <section className="card stack" aria-live="polite">
-          <h2 className="card__title">
-            {seleccionada.nombre}
-          </h2>
-
-          <p className="muted">
-            Nivel {seleccionada.nivelSeguridad} de 5 · {seleccionada.tipo}
-          </p>
-
-          {seleccionada.descripcion && (
-            <p>{seleccionada.descripcion}</p>
-          )}
-        </section>
       )}
 
       <Modal
