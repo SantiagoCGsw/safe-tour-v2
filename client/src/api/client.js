@@ -27,7 +27,7 @@ export const borrarToken = () => {
   }
 }
 
-const base = import.meta.env.VITEAPIURL ?? 'http://localhost:3000'
+const base = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
 const client = axios.create({
   baseURL: `${base}/api`,
