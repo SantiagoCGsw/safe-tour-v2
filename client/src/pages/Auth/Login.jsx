@@ -24,7 +24,7 @@ export default function Login() {
   }
 
   return (
-    <main className="auth">
+    <>
       <div className="card auth__card">
         <h1 className="auth__brand">Safe Tour</h1>
         <p className="muted">Inicia sesión para ver las zonas de Bogotá.</p>
@@ -82,6 +82,6 @@ export default function Login() {
           ¿No tienes cuenta? <Link to="/registro">Regístrate</Link>
         </p>
       </div>
-    </main>
+    </>
   )
 }

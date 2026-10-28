@@ -40,7 +40,7 @@ export default function Register() {
   }
 
   return (
-    <main className="auth">
+    <>
       <div className="card auth__card">
         <h1 className="auth__brand">Crear cuenta</h1>
         <p className="muted">Safe Tour te muestra las zonas de riesgo en Bogotá.</p>
@@ -118,6 +118,6 @@ export default function Register() {
           ¿Ya tienes cuenta? <Link to="/login">Inicia sesión</Link>
         </p>
       </div>
-    </main>
+    </>
   )
 }

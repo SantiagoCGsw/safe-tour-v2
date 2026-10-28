@@ -5,6 +5,7 @@ import { useAuth } from './context/AuthContext.jsx'
 import Navbar from './components/common/Navbar.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
 import ChatWidget from './components/chatbot/ChatWidget.jsx'
+import VideoBackground from './components/auth/VideoBackground.jsx'
 
 const Login = lazy(() => import('./pages/Auth/Login.jsx'))
 const Register = lazy(() => import('./pages/Auth/Register.jsx'))
@@ -39,6 +40,17 @@ function RutaProtegida({ roles, children }) {
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   if (roles && !roles.includes(user.rol)) return <Navigate to="/mapa" replace />
   return children
+}
+
+function AuthLayout() {
+  return (
+    <main className="auth">
+      <VideoBackground />
+      <Suspense fallback={null}>
+        <Outlet />
+      </Suspense>
+    </main>
+  )
 }
 
 function Layout() {
@@ -80,21 +92,15 @@ export default function App() {
         <Suspense fallback={<Cargando />}>
           <Routes>
             <Route
-              path="/login"
               element={
                 <SoloInvitados>
-                  <Login />
+                  <AuthLayout />
                 </SoloInvitados>
               }
-            />
-            <Route
-              path="/registro"
-              element={
-                <SoloInvitados>
-                  <Register />
-                </SoloInvitados>
-              }
-            />
+            >
+              <Route path="/login" element={<Login />} />
+              <Route path="/registro" element={<Register />} />
+            </Route>
 
             <Route
               element={
