@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MapView from '../../components/map/MapView.jsx'
 import ZoneLayer from '../../components/map/ZoneLayer.jsx'
+import ZoneList from '../../components/map/ZoneList.jsx'
 import HeatLayer from '../../components/map/HeatLayer.jsx'
 import ReportMarker from '../../components/map/ReportMarker.jsx'
 import ReportForm from '../../components/reports/ReportForm.jsx'
@@ -26,6 +27,8 @@ const AVISO_UBICACION = {
   error: 'No se pudo obtener tu ubicación.',
   'no-soportado': 'Este dispositivo no permite obtener la ubicación.',
 }
+
+const SIN_ZONAS = []
 
 const ESTADOS_EN_MAPA = ['confirmado', 'publicado']
 
@@ -86,6 +89,7 @@ const tipoPredominante = (zona, reportes) => {
 export default function MapPage() {
   const [tipo, setTipo] = useState('')
   const [recarga, setRecarga] = useState(0)
+  const [elegidasIds, setElegidasIds] = useState([])
 
   const [resultado, setResultado] = useState({
     clave: null,
@@ -99,6 +103,7 @@ export default function MapPage() {
   const [aviso, setAviso] = useState('')
 
   const notificadas = useRef(new Set())
+  const mapaRef = useRef(null)
   const { position, status } = useGeolocation()
 
   const sensibilidad = leerSensibilidad()
@@ -143,7 +148,7 @@ export default function MapPage() {
   }, [clave, tipo])
 
   const cargando = resultado.clave !== clave
-  const zonas = cargando ? [] : resultado.zonas
+  const zonas = cargando ? SIN_ZONAS : resultado.zonas
   const error = cargando ? '' : resultado.error
   const mapa = cargando ? null : resultado.mapa
 
@@ -163,6 +168,24 @@ export default function MapPage() {
     (resultado.mapa === null || resultado.reportes === null)
 
   const zonasActuales = useGeofence(position, zonas)
+
+  // Zonas elegidas en la lista (solo las que siguen existiendo con el filtro actual).
+  // Sin ninguna elegida, el mapa muestra todas.
+  const elegidas = useMemo(
+    () => elegidasIds.filter((id) => zonas.some((z) => String(z._id) === id)),
+    [elegidasIds, zonas],
+  )
+  const zonasEnMapa = useMemo(
+    () => (elegidas.length === 0 ? zonas : zonas.filter((z) => elegidas.includes(String(z._id)))),
+    [elegidas, zonas],
+  )
+
+  const alternarZona = (id) => {
+    setElegidasIds((actuales) =>
+      actuales.includes(id) ? actuales.filter((x) => x !== id) : [...actuales, id],
+    )
+    mapaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
 
   const alertas = useMemo(() => {
     const resumen = mapa?.zonas ?? []
@@ -311,16 +334,27 @@ export default function MapPage() {
         </p>
       )}
 
-      <MapView
-        position={position}
-        centrarEnUsuario={!cargando && zonas.length === 0}
-      >
-        <ZoneLayer zonas={zonas} ajustar />
+      <div ref={mapaRef}>
+        <MapView
+          position={position}
+          centrarEnUsuario={!cargando && zonas.length === 0}
+        >
+          <ZoneLayer zonas={zonasEnMapa} ajustar />
 
-        {mapa && <HeatLayer puntos={mapa.puntos ?? []} />}
+          {mapa && <HeatLayer puntos={mapa.puntos ?? []} />}
 
-        <ReportMarker reportes={reportesMapa} />
-      </MapView>
+          <ReportMarker reportes={reportesMapa} />
+        </MapView>
+      </div>
+
+      {!cargando && !error && zonas.length > 0 && (
+        <ZoneList
+          zonas={zonas}
+          elegidas={elegidas}
+          onAlternar={alternarZona}
+          onLimpiar={() => setElegidasIds([])}
+        />
+      )}
 
       {cargando && (
         <div className="state" role="status">
