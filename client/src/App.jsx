@@ -12,7 +12,6 @@ import {
 import { useAuth } from './context/AuthContext.jsx'
 import Navbar from './components/common/Navbar.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
-import ChatWidget from './components/chatbot/ChatWidget.jsx'
 import VideoBackground from './components/auth/VideoBackground.jsx'
 
 const Login = lazy(() => import('./pages/Auth/Login.jsx'))
@@ -100,10 +99,6 @@ function Layout() {
 
       <Navbar />
 
-      <div className="page">
-        <ChatWidget />
-      </div>
-
       <main id="contenido" className="app-main">
         <Suspense fallback={<Cargando />}>
           <Outlet />
@@ -143,7 +138,7 @@ export default function App() {
       <BrowserRouter>
         <Suspense fallback={<Cargando />}>
           <Routes>
-            {/* Acceso público: login y registro sin cambios */}
+            {/* Acceso público */}
             <Route
               element={
                 <SoloInvitados>
@@ -155,7 +150,7 @@ export default function App() {
               <Route path="/registro" element={<Register />} />
             </Route>
 
-            {/* Páginas que requieren iniciar sesión */}
+            {/* Todas las páginas requieren iniciar sesión */}
             <Route
               element={
                 <RutaProtegida>
@@ -167,11 +162,9 @@ export default function App() {
               <Route path="/feed" element={<FeedPage />} />
               <Route path="/sitios" element={<PlacesPage />} />
               <Route path="/perfil" element={<ProfilePage />} />
-
-              {/* Nuevo asistente conversacional */}
               <Route path="/chatbot" element={<ChatPage />} />
 
-              {/* Acceso para gestores y administradores */}
+              {/* Solo gestores y administradores */}
               <Route
                 path="/gestor"
                 element={
@@ -181,6 +174,7 @@ export default function App() {
                 }
               />
 
+              {/* Solo administradores */}
               <Route
                 path="/admin"
                 element={
@@ -191,7 +185,6 @@ export default function App() {
               />
             </Route>
 
-            {/* Rutas generales */}
             <Route
               path="/"
               element={<Navigate to="/mapa" replace />}
