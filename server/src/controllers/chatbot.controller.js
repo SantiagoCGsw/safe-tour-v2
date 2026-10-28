@@ -1,7 +1,13 @@
-// server/src/controllers/chatbot.controller.js
+
 import { responderMensaje } from '../services/chatbot/responder.js'
 
 export const conversar = async (req, res) => {
-  const resultado = await responderMensaje(req.body.mensaje)
+  const preferencias = req.user?.preferenciasAsistente ?? {}
+
+  const resultado = await responderMensaje(
+    req.body.mensaje,
+    preferencias,
+  )
+
   res.json(resultado)
 }

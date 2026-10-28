@@ -1204,3 +1204,218 @@ body:has(.chat-page-shell) .page:has(.chat-widget) {
     transition: none;
   }
 }
+
+
+/* Login y registro: eliminar el panel blanco translúcido en tema claro */
+:root[data-theme='light'] .auth .card,
+:root[data-theme='light'] .auth .auth-card,
+:root[data-theme='light'] .auth__card,
+:root[data-theme='light'] .auth__panel,
+:root[data-theme='light'] .auth form {
+  background-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Evitar que los contenedores interiores tapen el video */
+:root[data-theme='light'] .auth .card::before,
+:root[data-theme='light'] .auth .auth-card::before,
+:root[data-theme='light'] .auth__card::before,
+:root[data-theme='light'] .auth__panel::before {
+  background: transparent;
+  opacity: 0;
+}
+
+
+/* Corrección definitiva del tamaño y alineación de los iconos */
+.sidebar .sidebar__icon-svg {
+  display: block !important;
+  width: 21px !important;
+  height: 21px !important;
+  min-width: 21px;
+  min-height: 21px;
+  max-width: 21px;
+  max-height: 21px;
+  flex: 0 0 21px;
+  overflow: hidden;
+}
+
+.sidebar .sidebar__link {
+  display: flex;
+  min-height: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  overflow: hidden;
+}
+
+.sidebar .sidebar__link > span:not(.sidebar__icon-svg) {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.sidebar .sidebar__icon,
+.sidebar .sidebar__chat-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+}
+
+.sidebar .sidebar__section-label {
+  min-height: 30px;
+}
+
+.sidebar__links {
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+}
+
+.sidebar__bottom {
+  flex: 0 0 auto;
+}
+
+.sidebar--collapsed .sidebar__link {
+  justify-content: center;
+  padding: 0;
+}
+
+@media (max-height: 650px) {
+  .sidebar {
+    overflow-y: auto;
+  }
+
+  .sidebar__header {
+    margin-bottom: 12px;
+  }
+
+  .sidebar__bottom {
+    margin-top: 12px;
+  }
+}
+
+
+/* Preferencias del asistente en el perfil */
+.profile-page {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.profile-page__header .muted {
+  margin-top: 0.35rem;
+}
+
+.profile-preferences__fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.profile-preferences__interests {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.profile-preferences__interest {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.profile-preferences__interest:has(input:checked) {
+  border-color: var(--brand-terracotta);
+  background: rgb(180 106 85 / 12%);
+}
+
+.profile-preferences__interest input,
+.profile-preferences__toggle input {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  accent-color: var(--brand-terracotta);
+}
+
+.profile-preferences__interest span {
+  font-size: 0.9rem;
+}
+
+.profile-preferences__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.profile-preferences__toggle:last-child {
+  border-bottom: 0;
+}
+
+.profile-preferences__toggle input {
+  margin-top: 0.2rem;
+}
+
+.profile-preferences__toggle span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.profile-preferences__toggle strong {
+  font-size: 0.92rem;
+}
+
+.profile-preferences__toggle small {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.profile-preferences__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.profile-preferences .field__hint {
+  line-height: 1.5;
+}
+
+.profile-preferences .input {
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 560px) {
+  .profile-preferences__interests {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-preferences__actions {
+    flex-direction: column;
+  }
+
+  .profile-preferences__actions .btn {
+    width: 100%;
+  }
+}
