@@ -8,6 +8,20 @@ const PROPORCION_RIESGO_ALTO = 0.15
 const MAXIMO_DIRECCIONES = 5
 const CENTRO_BOGOTA = { lat: 4.711, lng: -74.0721 }
 
+const URL_VALHALLA = 'https://valhalla1.openstreetmap.de/route'
+const URL_NOMINATIM = 'https://nominatim.openstreetmap.org/search'
+const USER_AGENT = 'SafeTour/2.0 (proyecto academico)'
+
+// Proveedor gratuito sin clave: ROUTING_PROVIDER=osm (Valhalla + Nominatim de OpenStreetMap)
+const usaOsm = () => process.env.ROUTING_PROVIDER === 'osm'
+
+const PERFILES_VALHALLA = {
+  'a-pie': 'pedestrian',
+  bicicleta: 'bicycle',
+  vehiculo: 'auto',
+  'transporte-publico': 'auto',
+}
+
 const PERFILES = {
   'a-pie': 'foot-walking',
   bicicleta: 'cycling-regular',
@@ -27,6 +41,93 @@ const poligonosAEvitar = (zonas) =>
   zonas.length === 0
     ? null
     : { type: 'MultiPolygon', coordinates: zonas.map((z) => [cerrarAnillo(z.coordenadas)]) }
+
+// Decodifica polylines de Valhalla (precisión 6) a [{ lat, lng }]
+const decodificarPolyline = (cadena, precision = 6) => {
+  const factor = 10 ** precision
+  const puntos = []
+  let indice = 0
+  let lat = 0
+  let lng = 0
+  const leer = () => {
+    let resultado = 0
+    let desplazamiento = 0
+    let byte
+    do {
+      byte = cadena.charCodeAt(indice++) - 63
+      resultado |= (byte & 0x1f) << desplazamiento
+      desplazamiento += 5
+    } while (byte >= 0x20)
+    return resultado & 1 ? ~(resultado >> 1) : resultado >> 1
+  }
+  while (indice < cadena.length) {
+    lat += leer()
+    lng += leer()
+    puntos.push({ lat: lat / factor, lng: lng / factor })
+  }
+  return puntos
+}
+
+const pedirRutaOsm = async (modo, origen, destino, zonas) => {
+  const cuerpo = {
+    locations: [
+      { lat: origen.lat, lon: origen.lng },
+      { lat: destino.lat, lon: destino.lng },
+    ],
+    costing: PERFILES_VALHALLA[modo],
+    directions_options: { units: 'kilometers' },
+  }
+  if (zonas) cuerpo.exclude_polygons = zonas.map((z) => cerrarAnillo(z.coordenadas))
+
+  let respuesta
+  try {
+    respuesta = await fetch(URL_VALHALLA, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
+      body: JSON.stringify(cuerpo),
+      signal: AbortSignal.timeout(TIEMPO_MAXIMO_MS),
+    })
+  } catch {
+    throw new AppError(502, 'No se pudo calcular la ruta')
+  }
+  if (!respuesta.ok) throw new AppError(502, 'No se pudo calcular la ruta')
+
+  const datos = await respuesta.json()
+  const viaje = datos?.trip
+  const forma = viaje?.legs?.[0]?.shape
+  if (!forma || !viaje?.summary) throw new AppError(502, 'No se pudo calcular la ruta')
+
+  return {
+    distanciaM: Math.round(viaje.summary.length * 1000),
+    duracionS: Math.round(viaje.summary.time),
+    coordenadas: decodificarPolyline(forma),
+  }
+}
+
+const buscarDireccionesOsm = async (texto) => {
+  const parametros = new URLSearchParams({
+    q: texto,
+    format: 'jsonv2',
+    limit: String(MAXIMO_DIRECCIONES),
+    countrycodes: 'co',
+    viewbox: '-74.25,4.85,-73.95,4.45',
+  })
+  let datos
+  try {
+    const respuesta = await fetch(`${URL_NOMINATIM}?${parametros}`, {
+      headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'es' },
+      signal: AbortSignal.timeout(TIEMPO_MAXIMO_MS),
+    })
+    if (!respuesta.ok) throw new Error('respuesta no válida')
+    datos = await respuesta.json()
+  } catch {
+    throw new AppError(502, 'No se pudo buscar la dirección')
+  }
+  const resultados = (Array.isArray(datos) ? datos : [])
+    .map((l) => ({ nombre: l?.display_name, lat: Number(l?.lat), lng: Number(l?.lon) }))
+    .filter((r) => typeof r.nombre === 'string' && Number.isFinite(r.lat) && Number.isFinite(r.lng))
+  return { resultados }
+}
 
 const pedirRuta = async (perfil, origen, destino, evitar) => {
   const clave = process.env.ORS_API_KEY
@@ -79,6 +180,7 @@ const formatear = (nombre, ruta, zonasRiesgo) => ({
 })
 
 export const buscarDirecciones = async (texto) => {
+  if (usaOsm()) return buscarDireccionesOsm(texto)
   const clave = process.env.ORS_API_KEY
   if (!clave) throw new AppError(503, 'Servicio de rutas no configurado')
 
@@ -120,12 +222,17 @@ export const obtenerRutas = async ({ origen, destino, modo }) => {
   const perfil = PERFILES[modo]
   const zonasRiesgo = await zonasDeAltoRiesgo()
 
-  const directa = await pedirRuta(perfil, origen, destino, null)
+  const pedir = usaOsm()
+    ? (_perfil, o, d, zonas) => pedirRutaOsm(modo, o, d, zonas)
+    : pedirRuta
+  const zonasAEvitar = (z) => (usaOsm() ? z : poligonosAEvitar(z))
+
+  const directa = await pedir(perfil, origen, destino, null)
   const rutas = [formatear('Ruta directa', directa, zonasRiesgo)]
 
   if (zonasRiesgo.length > 0) {
     try {
-      const alterna = await pedirRuta(perfil, origen, destino, poligonosAEvitar(zonasRiesgo))
+      const alterna = await pedir(perfil, origen, destino, zonasAEvitar(zonasRiesgo))
       rutas.push(formatear('Ruta evitando zonas de riesgo', alterna, zonasRiesgo))
     } catch {
       /* sin alterna: se devuelve solo la ruta directa */
