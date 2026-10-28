@@ -1,6 +1,14 @@
-// client/src/App.jsx
+
 import { Suspense, lazy } from 'react'
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import {
+  BrowserRouter,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom'
+
 import { useAuth } from './context/AuthContext.jsx'
 import Navbar from './components/common/Navbar.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
@@ -15,12 +23,13 @@ const PlacesPage = lazy(() => import('./pages/Places/PlacesPage.jsx'))
 const GestorPage = lazy(() => import('./pages/Gestor/GestorPage.jsx'))
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard.jsx'))
 const ProfilePage = lazy(() => import('./pages/Profile/ProfilePage.jsx'))
+const ChatPage = lazy(() => import('./pages/Chat/ChatPage.jsx'))
 
 function Cargando() {
   return (
-    <div className="state" role="status">
+    <div className="state" role="status" aria-live="polite">
       <div className="spinner" aria-hidden="true" />
-      <p>Cargando…</p>
+      <p>Cargando...</p>
     </div>
   )
 }
@@ -28,17 +37,45 @@ function Cargando() {
 function SoloInvitados({ children }) {
   const { user, cargando } = useAuth()
   const location = useLocation()
-  if (cargando) return <Cargando />
-  if (user) return <Navigate to={location.state?.from ?? '/mapa'} replace />
+
+  if (cargando) {
+    return <Cargando />
+  }
+
+  if (user) {
+    return (
+      <Navigate
+        to={location.state?.from ?? '/mapa'}
+        replace
+      />
+    )
+  }
+
   return children
 }
 
 function RutaProtegida({ roles, children }) {
   const { user, cargando } = useAuth()
   const location = useLocation()
-  if (cargando) return <Cargando />
-  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
-  if (roles && !roles.includes(user.rol)) return <Navigate to="/mapa" replace />
+
+  if (cargando) {
+    return <Cargando />
+  }
+
+  if (!user) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: location.pathname }}
+      />
+    )
+  }
+
+  if (roles && !roles.includes(user.rol)) {
+    return <Navigate to="/mapa" replace />
+  }
+
   return children
 }
 
@@ -46,7 +83,8 @@ function AuthLayout() {
   return (
     <main className="auth">
       <VideoBackground />
-      <Suspense fallback={null}>
+
+      <Suspense fallback={<Cargando />}>
         <Outlet />
       </Suspense>
     </main>
@@ -59,10 +97,13 @@ function Layout() {
       <a className="skip-link" href="#contenido">
         Saltar al contenido
       </a>
+
       <Navbar />
+
       <div className="page">
         <ChatWidget />
       </div>
+
       <main id="contenido" className="app-main">
         <Suspense fallback={<Cargando />}>
           <Outlet />
@@ -77,11 +118,22 @@ function NoEncontrada() {
     <div className="page">
       <div className="card state">
         <p className="state__title">Página no encontrada</p>
-        <a className="btn btn--primary" href="/mapa">
-          Ir al mapa
-        </a>
+
+        <p className="muted">
+          La página que buscas no existe o ha cambiado de dirección.
+        </p>
+
+        <LinkInicio />
       </div>
     </div>
+  )
+}
+
+function LinkInicio() {
+  return (
+    <a className="btn btn--primary" href="/mapa">
+      Ir al mapa
+    </a>
   )
 }
 
@@ -91,6 +143,7 @@ export default function App() {
       <BrowserRouter>
         <Suspense fallback={<Cargando />}>
           <Routes>
+            {/* Acceso público: login y registro sin cambios */}
             <Route
               element={
                 <SoloInvitados>
@@ -102,6 +155,7 @@ export default function App() {
               <Route path="/registro" element={<Register />} />
             </Route>
 
+            {/* Páginas que requieren iniciar sesión */}
             <Route
               element={
                 <RutaProtegida>
@@ -113,6 +167,11 @@ export default function App() {
               <Route path="/feed" element={<FeedPage />} />
               <Route path="/sitios" element={<PlacesPage />} />
               <Route path="/perfil" element={<ProfilePage />} />
+
+              {/* Nuevo asistente conversacional */}
+              <Route path="/chatbot" element={<ChatPage />} />
+
+              {/* Acceso para gestores y administradores */}
               <Route
                 path="/gestor"
                 element={
@@ -121,6 +180,7 @@ export default function App() {
                   </RutaProtegida>
                 }
               />
+
               <Route
                 path="/admin"
                 element={
@@ -131,7 +191,12 @@ export default function App() {
               />
             </Route>
 
-            <Route path="/" element={<Navigate to="/mapa" replace />} />
+            {/* Rutas generales */}
+            <Route
+              path="/"
+              element={<Navigate to="/mapa" replace />}
+            />
+
             <Route path="*" element={<NoEncontrada />} />
           </Routes>
         </Suspense>

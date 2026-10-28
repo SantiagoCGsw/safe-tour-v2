@@ -787,3 +787,62 @@ textarea.input {
 .map-box__map.leaflet-container {
   font-family: var(--font-sans);
 }
+
+
+/* ==========================================================================
+   Safe Tour — ajustes globales para la página del asistente
+   Se agregan al final de index.css sin modificar los estilos existentes.
+   ========================================================================== */
+
+body:has(.chat-page-shell) {
+  background: var(--bg);
+  background-image: none;
+  background-attachment: initial;
+}
+
+body:has(.chat-page-shell) .app-main {
+  min-width: 0;
+  padding-bottom: 0;
+}
+
+body:has(.chat-page-shell) .page:has(.chat-widget) {
+  display: none;
+}
+
+.chat-page-shell {
+  width: 100%;
+  min-width: 0;
+  min-height: calc(100dvh - var(--nav-h));
+  color: var(--text);
+  background: var(--bg);
+}
+
+.chat-page-shell button,
+.chat-page-shell input,
+.chat-page-shell textarea {
+  font: inherit;
+}
+
+.chat-page-shell button:focus-visible,
+.chat-page-shell a:focus-visible,
+.chat-page-shell input:focus-visible,
+.chat-page-shell textarea:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .chat-page-shell {
+    min-height: calc(100dvh - var(--nav-h));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-page-shell *,
+  .chat-page-shell *::before,
+  .chat-page-shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
